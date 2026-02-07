@@ -1,0 +1,308 @@
+#!/usr/bin/env python3
+import struct
+import threading
+import time
+import tempfile
+import subprocess
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from typing import Optional, Tuple
+
+import psutil
+import socket
+from scapy.all import sniff, Raw, conf
+import snappy
+import net_pb2 as OverField_pb2
+from msg_id import MsgId
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+id_to_name = {
+    v: k
+    for k, v in vars(MsgId).items()
+    if not k.startswith("__") and isinstance(v, int)
+}
+
+flow_buffers = defaultdict(bytearray)
+
+executor = ThreadPoolExecutor(max_workers=8)
+pending_lock = threading.Lock()
+pending = {}
+next_seq = 0
+print_seq = 0
+TRANSLATION_TIMEOUT = 3
+
+import os
+import requests
+from typing import Optional
+
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+DEFAULT_MODEL = ""
+
+def translate_text(
+    text: str,
+    target_lang: str = "zh",
+    model: str = DEFAULT_MODEL,
+    system_prompt: Optional[str] = None,
+    api_key: Optional[str] = "",
+    timeout: int = 15
+) -> str:
+    if system_prompt is None:
+        system_prompt = "You are a professional translator. Detect the input language automatically and translate the text accurately."
+
+    user_content = (
+        f"Please translate the following text to {target_lang}. "
+        "Only return the translated text (do not add explanations):\n\n"
+        f"{text}"
+    )
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
+        ],
+        "temperature": 0.0,
+        "max_tokens": 2000,
+    }
+
+    resp = requests.post(OPENAI_API_URL, headers=headers, json=payload, timeout=timeout)
+    resp.raise_for_status()
+    data = resp.json()
+
+    translated = data["choices"][0]["message"]["content"]
+    return translated.strip()
+
+
+
+def schedule_translation(name: str, text: str):
+    global next_seq
+    with pending_lock:
+        seq = next_seq
+        next_seq += 1
+        future = executor.submit(translate_text, text)
+        pending[seq] = (name, future)
+
+
+def printer_loop(stop_event: threading.Event):
+    global print_seq
+    while True:
+        with pending_lock:
+            has_next = print_seq in pending
+        if not has_next:
+            if stop_event.is_set():
+                with pending_lock:
+                    if not pending:
+                        break
+                time.sleep(0.05)
+                continue
+            time.sleep(0.05)
+            continue
+        with pending_lock:
+            name, future = pending[print_seq]
+        try:
+            res = future.result(timeout=TRANSLATION_TIMEOUT)
+            if res:
+                print(f"{name}> {res}")
+        except TimeoutError:
+            pass
+        except Exception:
+            pass
+        with pending_lock:
+            try:
+                del pending[print_seq]
+            except KeyError:
+                pass
+        print_seq += 1
+
+
+def process_flow_buffer(flow_key):
+    buf = flow_buffers[flow_key]
+    while True:
+        if len(buf) < 2:
+            break
+        try:
+            header_len = struct.unpack(">H", buf[0:2])[0]
+            if header_len>20*1024:
+                del buf[:2]
+                continue
+        except Exception:
+            try:
+                del buf[:2]
+            except Exception:
+                break
+            continue
+        if len(buf) < 2 + header_len:
+            break
+        header_data = bytes(buf[2:2 + header_len])
+        packet_head = OverField_pb2.PacketHead()
+        try:
+            packet_head.ParseFromString(header_data)
+        except Exception:
+            try:
+                del buf[:2]
+            except Exception:
+                break
+            continue
+        total_needed = 2 + header_len + getattr(packet_head, "body_len", 0)
+        if len(buf) < total_needed:
+            break
+        body_data = bytes(buf[2 + header_len: 2 + header_len + packet_head.body_len])
+        try:
+            del buf[:total_needed]
+        except Exception:
+            break
+        if getattr(packet_head, "flag", 0) == 1:
+            try:
+                body_data = snappy.uncompress(body_data)
+            except Exception:
+                try:
+                    del buf[:2]
+                except Exception:
+                    pass
+                continue
+        msgid = getattr(packet_head, "msg_id", None)
+        if msgid == 1936:
+            proto_name = id_to_name.get(msgid)
+            proto_cls = getattr(OverField_pb2, proto_name, None)
+            if proto_cls is None:
+                try:
+                    del buf[:2]
+                except Exception:
+                    pass
+                continue
+            try:
+                sy = proto_cls()
+                sy.ParseFromString(body_data)
+                txt = getattr(sy.msg, "text", "")
+                name = getattr(sy.msg, "name", "")
+                if txt:
+                    schedule_translation(name, txt)
+            except Exception:
+                try:
+                    del buf[:2]
+                except Exception:
+                    pass
+                continue
+
+
+def pkt_callback(pkt, ip_filter: Optional[str], port_range: Optional[Tuple[int, int]], stop_event: Optional[threading.Event] = None):
+    if stop_event is not None and stop_event.is_set():
+        return False
+    if not pkt.haslayer(Raw):
+        return
+    ip_layer = pkt.getlayer("IP")
+    if ip_layer is None:
+        return
+    src_ip = ip_layer.src
+    dst_ip = ip_layer.dst
+    sport = getattr(pkt.payload, "sport", None)
+    dport = getattr(pkt.payload, "dport", None)
+    if ip_filter is not None:
+        if not (src_ip == ip_filter or dst_ip == ip_filter):
+            return
+    if port_range is not None:
+        pmin, pmax = port_range
+        sport_ok = (sport is not None and pmin <= sport <= pmax)
+        dport_ok = (dport is not None and pmin <= dport <= pmax)
+        if not (sport_ok or dport_ok):
+            return
+    payload = bytes(pkt[Raw].load)
+    if not payload:
+        return
+    flow_key = (src_ip, dst_ip, sport, dport)
+    flow_buffers[flow_key].extend(payload)
+    try:
+        process_flow_buffer(flow_key)
+    except Exception:
+        pass
+
+
+def start_sniffer(iface: str, ip: Optional[str], port_range: Optional[Tuple[int, int]], stop_event: threading.Event, bpf: Optional[str] = None, promisc: bool = False):
+    if ip is None:
+        if port_range is not None:
+            pmin, pmax = port_range
+            bpf_filter = f"tcp and portrange {pmin}-{pmax}"
+        else:
+            bpf_filter = "tcp"
+    else:
+        if port_range is not None:
+            pmin, pmax = port_range
+            bpf_filter = f"tcp and host {ip} and portrange {pmin}-{pmax}"
+        else:
+            bpf_filter = f"tcp and host {ip}"
+    if bpf:
+        bpf_filter = f"({bpf_filter}) and ({bpf})"
+    conf.sniff_promisc = bool(promisc)
+    def _stop_filter(pkt):
+        return stop_event.is_set()
+    def _prn_wrapper(pkt):
+        return pkt_callback(pkt, ip_filter=ip, port_range=port_range, stop_event=stop_event)
+    sniff(iface=iface, filter=bpf_filter, prn=_prn_wrapper, store=0, stop_filter=_stop_filter)
+
+
+def protoc_decode_raw(body_data: bytes):
+    with tempfile.NamedTemporaryFile(delete=False) as f:
+        f.write(body_data)
+        fname = f.name
+    proc = subprocess.Popen(["protoc", "--decode_raw"], stdin=open(fname, "rb"), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = proc.communicate()
+    return out.decode()
+
+
+def get_active_interface():
+    gws = psutil.net_if_addrs()
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+    finally:
+        s.close()
+    for iface, addrs in gws.items():
+        for addr in addrs:
+            if addr.family == socket.AF_INET and addr.address == local_ip:
+                return iface
+    return None
+
+if __name__ == "__main__":
+    iface = get_active_interface()
+    if iface is None:
+        raise RuntimeError("No active network interface found")
+
+    stop_evt = threading.Event()
+
+    printer_thread = threading.Thread(
+        target=printer_loop,
+        args=(stop_evt,)
+    )
+    printer_thread.start()
+
+    sniff_thread = threading.Thread(
+        target=start_sniffer,
+        args=(iface, None, (11001, 11003), stop_evt),
+        kwargs={"bpf": None, "promisc": False},
+    )
+    sniff_thread.start()
+
+    try:
+        while sniff_thread.is_alive():
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        stop_evt.set()
+
+    sniff_thread.join(timeout=5)
+
+    with pending_lock:
+        pass
+
+    stop_evt.set()
+    printer_thread.join(timeout=5)
+    executor.shutdown(wait=False)
+
