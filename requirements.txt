@@ -2,6 +2,7 @@ pyqt5
 asyncio
 requests
 psutil
-snappy
+python-snappy
 scapy
 googletrans
+protobuf
