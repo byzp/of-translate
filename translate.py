@@ -13,25 +13,30 @@ TRANSLATION_TIMEOUT = 10
 _executor = ThreadPoolExecutor(max_workers=4)
 _services = []
 
+
 def configure(cfg: dict):
     global _cfg, OPENAI_API_URL, API_KEY, DEFAULT_MODEL, TARGET_LANG, TRANSLATION_TIMEOUT, _services
     _cfg = cfg
-    OPENAI_API_URL = cfg.get("OPENAI_API_URL")
-    API_KEY = cfg.get("API_KEY")
-    DEFAULT_MODEL = cfg.get("DEFAULT_MODEL", "gpt-4.1-nano")
     TARGET_LANG = cfg.get("TARGET_LANG", TARGET_LANG)
     TRANSLATION_TIMEOUT = cfg.get("TRANSLATION_TIMEOUT", TRANSLATION_TIMEOUT)
 
     services = []
-    services.append({"name": "google", "timeout": cfg.get("GOOGLE_TIMEOUT", 5)})
-    if OPENAI_API_URL and API_KEY:
-        services.append({"name": "openai", "timeout": cfg.get("OPENAI_TIMEOUT", 8)})
-    for svc in cfg.get("EXTERNAL_TRANSLATION_APIS", []):
-        if isinstance(svc, dict) and svc.get("url"):
-            services.append({"name": "external", "url": svc["url"], "timeout": svc.get("timeout", 6)})
+    if cfg.get("google").get("enable"):
+        services.append({"name": "google", "timeout": cfg.get("timeout", 5)})
+    if cfg.get("openai").get("enable"):
+        OPENAI_API_URL = cfg.get("openai").get("api_url")
+        API_KEY = cfg.get("openai").get("api_key")
+        DEFAULT_MODEL = cfg.get("openai").get("model", "gpt-4.1-nano")
+        services.append({"name": "openai", "timeout": cfg.get("timeout", 8)})
+    if cfg.get("external").get("enable"):
+        svc = cfg.get("external")
+        services.append(
+            {"name": "external", "url": svc["url"], "timeout": svc.get("timeout", 6)}
+        )
 
     services.sort(key=lambda s: 0 if s.get("name") == "google" else 1)
     _services = services
+
 
 def _openai_translate(text: str, timeout: int) -> Optional[str]:
     if not OPENAI_API_URL or not API_KEY:
@@ -50,7 +55,7 @@ def _openai_translate(text: str, timeout: int) -> Optional[str]:
         "model": DEFAULT_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content}
+            {"role": "user", "content": user_content},
         ],
         "temperature": 0.0,
         "max_tokens": 2000,
@@ -75,10 +80,12 @@ def _openai_translate(text: str, timeout: int) -> Optional[str]:
         return translated.strip()
     return None
 
+
 async def _async_translate(text, dest):
     async with Translator() as translator:
         result = await translator.translate(text, dest=dest)
         return getattr(result, "text", str(result))
+
 
 def _google_translate(text: str, timeout: int) -> Optional[str]:
     def worker():
@@ -95,6 +102,7 @@ def _google_translate(text: str, timeout: int) -> Optional[str]:
         except Exception:
             try:
                 from googletrans import Translator as SyncTranslator
+
                 sync_trans = SyncTranslator()
                 res = sync_trans.translate(text, dest=TARGET_LANG)
                 return getattr(res, "text", str(res))
@@ -106,6 +114,7 @@ def _google_translate(text: str, timeout: int) -> Optional[str]:
         return future.result(timeout=timeout)
     except Exception:
         return None
+
 
 def _external_translate(text: str, url: str, timeout: int) -> Optional[str]:
     payload = {"text": text, "target": TARGET_LANG}
@@ -121,12 +130,16 @@ def _external_translate(text: str, url: str, timeout: int) -> Optional[str]:
                 if "choices" in data and data["choices"]:
                     c = data["choices"][0]
                     if isinstance(c, dict):
-                        return c.get("text", "").strip() or c.get("message", {}).get("content", "").strip()
+                        return (
+                            c.get("text", "").strip()
+                            or c.get("message", {}).get("content", "").strip()
+                        )
             return resp.text.strip()
         except Exception:
             return resp.text.strip()
     except Exception:
         return None
+
 
 def translate_text(text: str, system_prompt: Optional[str] = None) -> str:
     services = globals().get("_services", [])
@@ -149,6 +162,7 @@ def translate_text(text: str, system_prompt: Optional[str] = None) -> str:
             if result:
                 return result
         except TimeoutError:
+            print(f"translate timeout: {text}")
             continue
         except Exception:
             continue

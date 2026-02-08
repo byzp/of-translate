@@ -15,7 +15,7 @@ import snappy
 import net_pb2 as OverField_pb2
 from msg_id import MsgId
 import logging
-import json
+import yaml
 from ui import create_floating_window, send_text
 import translate
 
@@ -36,6 +36,7 @@ pending = {}
 next_seq = 0
 print_seq = 0
 
+
 def schedule_translation(name: str, text: str):
     global next_seq
     with pending_lock:
@@ -43,6 +44,7 @@ def schedule_translation(name: str, text: str):
         next_seq += 1
         future = executor.submit(translate.translate_text, text)
         pending[seq] = (name, future)
+
 
 def printer_loop(stop_event: threading.Event):
     global print_seq
@@ -79,6 +81,7 @@ def printer_loop(stop_event: threading.Event):
                 pass
         print_seq += 1
 
+
 def process_flow_buffer(flow_key):
     buf = flow_buffers[flow_key]
     while True:
@@ -97,7 +100,7 @@ def process_flow_buffer(flow_key):
             continue
         if len(buf) < 2 + header_len:
             break
-        header_data = bytes(buf[2:2 + header_len])
+        header_data = bytes(buf[2 : 2 + header_len])
         packet_head = OverField_pb2.PacketHead()
         try:
             packet_head.ParseFromString(header_data)
@@ -110,7 +113,7 @@ def process_flow_buffer(flow_key):
         total_needed = 2 + header_len + getattr(packet_head, "body_len", 0)
         if len(buf) < total_needed:
             break
-        body_data = bytes(buf[2 + header_len: 2 + header_len + packet_head.body_len])
+        body_data = bytes(buf[2 + header_len : 2 + header_len + packet_head.body_len])
         try:
             del buf[:total_needed]
         except Exception:
@@ -141,7 +144,13 @@ def process_flow_buffer(flow_key):
         except Exception:
             continue
 
-def pkt_callback(pkt, ip_filter: Optional[str], port_range: Optional[Tuple[int, int]], stop_event: Optional[threading.Event] = None):
+
+def pkt_callback(
+    pkt,
+    ip_filter: Optional[str],
+    port_range: Optional[Tuple[int, int]],
+    stop_event: Optional[threading.Event] = None,
+):
     if stop_event is not None and stop_event.is_set():
         return False
     if not pkt.haslayer(Raw):
@@ -158,8 +167,8 @@ def pkt_callback(pkt, ip_filter: Optional[str], port_range: Optional[Tuple[int, 
             return
     if port_range is not None:
         pmin, pmax = port_range
-        sport_ok = (sport is not None and pmin <= sport <= pmax)
-        dport_ok = (dport is not None and pmin <= dport <= pmax)
+        sport_ok = sport is not None and pmin <= sport <= pmax
+        dport_ok = dport is not None and pmin <= dport <= pmax
         if not (sport_ok or dport_ok):
             return
     payload = bytes(pkt[Raw].load)
@@ -172,7 +181,15 @@ def pkt_callback(pkt, ip_filter: Optional[str], port_range: Optional[Tuple[int, 
     except Exception:
         pass
 
-def start_sniffer(iface: str, ip: Optional[str], port_range: Optional[Tuple[int, int]], stop_event: threading.Event, bpf: Optional[str] = None, promisc: bool = False):
+
+def start_sniffer(
+    iface: str,
+    ip: Optional[str],
+    port_range: Optional[Tuple[int, int]],
+    stop_event: threading.Event,
+    bpf: Optional[str] = None,
+    promisc: bool = False,
+):
     if ip is None:
         if port_range is not None:
             pmin, pmax = port_range
@@ -188,11 +205,23 @@ def start_sniffer(iface: str, ip: Optional[str], port_range: Optional[Tuple[int,
     if bpf:
         bpf_filter = f"({bpf_filter}) and ({bpf})"
     conf.sniff_promisc = bool(promisc)
+
     def _stop_filter(pkt):
         return stop_event.is_set()
+
     def _prn_wrapper(pkt):
-        return pkt_callback(pkt, ip_filter=ip, port_range=port_range, stop_event=stop_event)
-    sniff(iface=iface, filter=bpf_filter, prn=_prn_wrapper, store=0, stop_filter=_stop_filter)
+        return pkt_callback(
+            pkt, ip_filter=ip, port_range=port_range, stop_event=stop_event
+        )
+
+    sniff(
+        iface=iface,
+        filter=bpf_filter,
+        prn=_prn_wrapper,
+        store=0,
+        stop_filter=_stop_filter,
+    )
+
 
 def get_active_interface():
     gws = psutil.net_if_addrs()
@@ -208,8 +237,13 @@ def get_active_interface():
                 return iface
     return None
 
+
 def find_external_config(filename="config.json"):
-    exe_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+    exe_dir = (
+        os.path.dirname(sys.executable)
+        if getattr(sys, "frozen", False)
+        else os.path.dirname(os.path.abspath(__file__))
+    )
     candidate = os.path.join(exe_dir, filename)
     if os.path.exists(candidate):
         return candidate
@@ -222,14 +256,15 @@ def find_external_config(filename="config.json"):
         return user_candidate
     return None
 
+
 if __name__ == "__main__":
     try:
-        config_path = find_external_config("config.json")
+        config_path = find_external_config("config.yaml")
         with open(config_path, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
+            cfg = yaml.load(f, Loader=yaml.SafeLoader)
     except Exception as e:
         print("config.json load failed! use default config.")
-        cfg={}
+        cfg = {}
     translate.configure(cfg)
     iface = get_active_interface()
     threading.Thread(target=create_floating_window, daemon=True).start()

@@ -1,0 +1,18 @@
+TARGET_LANG: "en"
+TRANSLATION_TIMEOUT: 10
+
+google:
+  enable: true
+  timeout: 5
+
+openai:
+  enable: false
+  api_url: "https://api.openai.com/v1/chat/completions"
+  api_key: "sk-xxx"
+  model: "gpt-4.1-nano"
+  timeout: 8
+
+external:
+  enable: false
+  url: "https://translate.example.com/translate"
+  timeout: 6

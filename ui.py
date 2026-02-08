@@ -15,10 +15,13 @@ _resize_margin = 8
 _min_width = 200
 _min_height = 80
 
+
 class _TextSignal(QObject):
     sig = pyqtSignal(str)
 
+
 _signal = _TextSignal()
+
 
 class FloatingWindow(QWidget):
     def __init__(self):
@@ -58,10 +61,14 @@ class FloatingWindow(QWidget):
         self.text.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.text.installEventFilter(self)
-        self.drag_bar.setStyleSheet("background: rgba(0,0,0,120); border-top-left-radius:8px; border-top-right-radius:8px;")
-        self.text.setStyleSheet("background: rgba(0,0,0,120); color: white; border-bottom-left-radius:8px; border-bottom-right-radius:8px; padding:6px;")
+        self.drag_bar.setStyleSheet(
+            "background: rgba(0,0,0,120); border-top-left-radius:8px; border-top-right-radius:8px;"
+        )
+        self.text.setStyleSheet(
+            "background: rgba(0,0,0,120); color: white; border-bottom-left-radius:8px; border-bottom-right-radius:8px; padding:6px;"
+        )
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0,0,0,0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         main_layout.addWidget(self.drag_bar)
         main_layout.addWidget(self.text)
@@ -70,11 +77,20 @@ class FloatingWindow(QWidget):
 
     def eventFilter(self, obj, event):
         if obj is self.text:
-            if event.type() in (event.MouseButtonPress, event.MouseButtonRelease, event.MouseMove, event.Wheel):
+            if event.type() in (
+                event.MouseButtonPress,
+                event.MouseButtonRelease,
+                event.MouseMove,
+                event.Wheel,
+            ):
                 self._reset_opacity_and_timer()
             if event.type() == event.KeyPress:
                 self._reset_opacity_and_timer()
-        if event.type() in (event.MouseButtonPress, event.MouseButtonRelease, event.MouseMove):
+        if event.type() in (
+            event.MouseButtonPress,
+            event.MouseButtonRelease,
+            event.MouseMove,
+        ):
             if hasattr(event, "button"):
                 local_pos = event.pos()
             else:
@@ -115,7 +131,9 @@ class FloatingWindow(QWidget):
         dirs = self._get_edges(p)
         if ("left" in dirs and "top" in dirs) or ("right" in dirs and "bottom" in dirs):
             self.setCursor(Qt.SizeFDiagCursor)
-        elif ("right" in dirs and "top" in dirs) or ("left" in dirs and "bottom" in dirs):
+        elif ("right" in dirs and "top" in dirs) or (
+            "left" in dirs and "bottom" in dirs
+        ):
             self.setCursor(Qt.SizeBDiagCursor)
         elif "left" in dirs or "right" in dirs:
             self.setCursor(Qt.SizeHorCursor)
@@ -135,7 +153,11 @@ class FloatingWindow(QWidget):
             return
 
     def _window_mouse_move(self, local_pos, global_pos, buttons):
-        if self._resizing and self._press_pos is not None and self._press_geom is not None:
+        if (
+            self._resizing
+            and self._press_pos is not None
+            and self._press_geom is not None
+        ):
             dx = global_pos.x() - self._press_pos.x()
             dy = global_pos.y() - self._press_pos.y()
             geom = QRect(self._press_geom)
@@ -221,6 +243,7 @@ class FloatingWindow(QWidget):
         if self._current_opacity <= _min_opacity + 1e-6:
             self._fade_timer.stop()
 
+
 def _ensure_app_and_window():
     global _app, _win
     if _app is None:
@@ -232,12 +255,14 @@ def _ensure_app_and_window():
             _signal.sig.emit(t)
         _pending_texts.clear()
 
+
 def create_floating_window():
     _ensure_app_and_window()
     try:
         _app.exec_()
     except Exception:
         pass
+
 
 def send_text(s: str):
     if _win is None:
@@ -248,6 +273,7 @@ def send_text(s: str):
         _signal.sig.emit(s)
     else:
         _signal.sig.emit(s)
+
 
 if __name__ == "__main__":
     create_floating_window()
