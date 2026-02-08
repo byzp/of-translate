@@ -2,6 +2,7 @@ import requests
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Optional
+import traceback
 from googletrans import Translator
 
 _cfg = {}
@@ -38,9 +39,13 @@ def configure(cfg: dict):
     _services = services
 
 
+
+
 def _openai_translate(text: str, timeout: int) -> Optional[str]:
     if not OPENAI_API_URL or not API_KEY:
+        print("Error: OPENAI_API_URL or API_KEY is not set.")
         return None
+
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json",
@@ -60,25 +65,57 @@ def _openai_translate(text: str, timeout: int) -> Optional[str]:
         "temperature": 0.0,
         "max_tokens": 2000,
     }
-    resp = requests.post(OPENAI_API_URL, headers=headers, json=payload, timeout=timeout)
-    resp.raise_for_status()
-    data = resp.json()
-    translated = None
-    if isinstance(data, dict):
-        if "choices" in data and data["choices"]:
-            first = data["choices"][0]
-            msg = first.get("message") or first.get("text")
-            if isinstance(msg, dict):
-                translated = msg.get("content")
-            elif isinstance(msg, str):
-                translated = msg
-        elif "translatedText" in data:
-            translated = data.get("translatedText")
-    if translated is None:
-        translated = resp.text
-    if translated:
-        return translated.strip()
+
+    try:
+        resp = requests.post(OPENAI_API_URL, headers=headers, json=payload, timeout=timeout)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        print("Request/HTTP error when calling OpenAI API:", e)
+        try:
+            resp_obj = getattr(e, "response", None)
+            if resp_obj is not None:
+                print("Response status:", resp_obj.status_code)
+                print("Response body:", resp_obj.text)
+        except Exception:
+            pass
+        traceback.print_exc()
+        return None
+
+    try:
+        data = resp.json()
+    except ValueError as e:
+        print("Failed to decode JSON response:", e)
+        print("Raw response text:", resp.text)
+        traceback.print_exc()
+        return None
+
+    try:
+        translated = None
+        if isinstance(data, dict):
+            if "choices" in data and data["choices"]:
+                first = data["choices"][0]
+                msg = first.get("message") or first.get("text")
+                if isinstance(msg, dict):
+                    translated = msg.get("content")
+                elif isinstance(msg, str):
+                    translated = msg
+            elif "translatedText" in data:
+                translated = data.get("translatedText")
+
+        if translated is None:
+            print("Warning: couldn't find 'choices' or 'translatedText' in JSON; falling back to raw response text.")
+            translated = resp.text
+
+        if translated:
+            return translated.strip()
+    except Exception as e:
+        print("Error extracting translation from response:", e)
+        print("Response JSON:", data)
+        traceback.print_exc()
+        return None
+
     return None
+
 
 
 async def _async_translate(text, dest):
