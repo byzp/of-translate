@@ -1,0 +1,7 @@
+pyqt5
+asyncio
+requests
+psutil
+snappy
+scapy
+googletrans
