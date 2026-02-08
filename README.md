@@ -8,3 +8,48 @@
 ### config.json
 
 - by default, Google Translate is used, which is free. If it doesn't work, you can try filling in your OpenAI API key to use AI Translate
+
+### TARGET_LANG
+
+* English: EN
+* Chinese (Simplified/Traditional): ZH
+* Spanish: ES
+* French: FR
+* Arabic: AR
+* Russian: RU
+* Portuguese: PT
+* German: DE
+* Japanese: JA
+* Korean: KO
+* Italian: IT
+* Hindi: HI
+* Turkish: TR
+* Vietnamese: VI
+* Thai: TH
+* Indonesian: ID
+* Malay: MS
+* Dutch: NL
+* Polish: PL
+* Swedish: SV
+* Norwegian: NO
+* Danish: DA
+* Finnish: FI
+* Czech: CS
+* Greek: EL
+* Hebrew: HE
+* Hungarian: HU
+* Romanian: RO
+* Ukrainian: UK
+* Bulgarian: BG
+* Serbian: SR
+* Croatian: HR
+* Slovak: SK
+* Slovenian: SL
+* Lithuanian: LT
+* Latvian: LV
+* Estonian: ET
+* Persian (Farsi): FA
+* Urdu: UR
+* Bengali: BN
+* Tamil: TA
+* Telugu: TE

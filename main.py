@@ -5,6 +5,8 @@ import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Optional, Tuple
+import os
+import sys
 
 import psutil
 import socket
@@ -206,9 +208,24 @@ def get_active_interface():
                 return iface
     return None
 
+def find_external_config(filename="config.json"):
+    exe_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+    candidate = os.path.join(exe_dir, filename)
+    if os.path.exists(candidate):
+        return candidate
+    cwd_candidate = os.path.join(os.getcwd(), filename)
+    if os.path.exists(cwd_candidate):
+        return cwd_candidate
+    user_dir = os.path.expanduser("~")
+    user_candidate = os.path.join(user_dir, "." + filename)
+    if os.path.exists(user_candidate):
+        return user_candidate
+    return None
+
 if __name__ == "__main__":
     try:
-        with open("config.json", "r", encoding="utf-8") as f:
+        config_path = find_external_config("config.json")
+        with open(config_path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
     except Exception as e:
         print("config.json load failed! use default config.")
