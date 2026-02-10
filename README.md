@@ -9,6 +9,8 @@
 
 - by default, Google Translate is used, which is free. If it doesn't work, you can try filling in your OpenAI API key to use AI Translate
 
+- 如果你在中国大陆，并且没有可用的代理，请禁用google翻译配置并启用ai翻译
+
 ### TARGET_LANG
 
 * English: EN

@@ -9,6 +9,7 @@ import os
 import sys
 
 import psutil
+import traceback
 import socket
 from scapy.all import sniff, Raw, conf
 import snappy
@@ -213,14 +214,17 @@ def start_sniffer(
         return pkt_callback(
             pkt, ip_filter=ip, port_range=port_range, stop_event=stop_event
         )
-
-    sniff(
-        iface=iface,
-        filter=bpf_filter,
-        prn=_prn_wrapper,
-        store=0,
-        stop_filter=_stop_filter,
-    )
+    try:
+        sniff(
+            iface=iface,
+            filter=bpf_filter,
+            prn=_prn_wrapper,
+            store=0,
+            stop_filter=_stop_filter,
+        )
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Sniff initialization failed, did you forget to install NPCAP? https://npcap.com/dist/npcap-1.87.exe")
 
 
 def get_active_interface():
@@ -257,13 +261,14 @@ def find_external_config(filename="config.json"):
     return None
 
 
-if __name__ == "__main__":
+def main():
     try:
         config_path = find_external_config("config.yaml")
         with open(config_path, "r", encoding="utf-8") as f:
             cfg = yaml.load(f, Loader=yaml.SafeLoader)
     except Exception as e:
-        print("config.json load failed! use default config.")
+        traceback.print_exc()
+        print("config.json load failed! use default config. You can access https://github.com/byzp/of-translate/blob/main/config.yaml Download this file")
         cfg = {}
     translate.configure(cfg)
     iface = get_active_interface()
@@ -292,3 +297,11 @@ if __name__ == "__main__":
     stop_evt.set()
     printer_thread.join(timeout=5)
     executor.shutdown(wait=False)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        traceback.print_exc()
+        print("Startup failed, you can copy the output of this page and submit an issue. https://github.com/byzp/of-translate/issues")
+        input("press any key to exit...")

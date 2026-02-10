@@ -22,14 +22,14 @@ def configure(cfg: dict):
     TRANSLATION_TIMEOUT = cfg.get("TRANSLATION_TIMEOUT", TRANSLATION_TIMEOUT)
 
     services = []
-    if cfg.get("google").get("enable"):
+    if cfg=={} or cfg.get("google").get("enable"):
         services.append({"name": "google", "timeout": cfg.get("timeout", 5)})
-    if cfg.get("openai").get("enable"):
+    if cfg.get("openai") and cfg.get("openai").get("enable"):
         OPENAI_API_URL = cfg.get("openai").get("api_url")
         API_KEY = cfg.get("openai").get("api_key")
         DEFAULT_MODEL = cfg.get("openai").get("model", "gpt-4.1-nano")
         services.append({"name": "openai", "timeout": cfg.get("timeout", 8)})
-    if cfg.get("external").get("enable"):
+    if cfg.get("external") and cfg.get("external").get("enable"):
         svc = cfg.get("external")
         services.append(
             {"name": "external", "url": svc["url"], "timeout": svc.get("timeout", 6)}

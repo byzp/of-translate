@@ -1,4 +1,4 @@
-TARGET_LANG: "en"
+TARGET_LANG: "en" # README.md has abbreviations for more languages
 TRANSLATION_TIMEOUT: 10
 
 google:
