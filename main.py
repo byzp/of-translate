@@ -214,6 +214,7 @@ def start_sniffer(
         return pkt_callback(
             pkt, ip_filter=ip, port_range=port_range, stop_event=stop_event
         )
+
     try:
         sniff(
             iface=iface,
@@ -224,7 +225,9 @@ def start_sniffer(
         )
     except Exception as e:
         traceback.print_exc()
-        print(f"Sniff initialization failed, did you forget to install NPCAP? https://npcap.com/dist/npcap-1.87.exe")
+        print(
+            f"Sniff initialization failed, did you forget to install NPCAP? https://npcap.com/dist/npcap-1.87.exe"
+        )
 
 
 def get_active_interface():
@@ -268,7 +271,9 @@ def main():
             cfg = yaml.load(f, Loader=yaml.SafeLoader)
     except Exception as e:
         traceback.print_exc()
-        print("config.json load failed! use default config. You can access https://github.com/byzp/of-translate/blob/main/config.yaml Download this file")
+        print(
+            "config.json load failed! use default config. You can access https://github.com/byzp/of-translate/blob/main/config.yaml Download this file"
+        )
         cfg = {}
     translate.configure(cfg)
     iface = get_active_interface()
@@ -298,10 +303,13 @@ def main():
     printer_thread.join(timeout=5)
     executor.shutdown(wait=False)
 
+
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
         traceback.print_exc()
-        print("Startup failed, you can copy the output of this page and submit an issue. https://github.com/byzp/of-translate/issues")
+        print(
+            "Startup failed, you can copy the output of this page and submit an issue. https://github.com/byzp/of-translate/issues"
+        )
         input("press any key to exit...")

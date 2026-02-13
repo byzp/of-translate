@@ -22,7 +22,7 @@ def configure(cfg: dict):
     TRANSLATION_TIMEOUT = cfg.get("TRANSLATION_TIMEOUT", TRANSLATION_TIMEOUT)
 
     services = []
-    if cfg=={} or cfg.get("google").get("enable"):
+    if cfg == {} or cfg.get("google").get("enable"):
         services.append({"name": "google", "timeout": cfg.get("timeout", 5)})
     if cfg.get("openai") and cfg.get("openai").get("enable"):
         OPENAI_API_URL = cfg.get("openai").get("api_url")
@@ -37,8 +37,6 @@ def configure(cfg: dict):
 
     services.sort(key=lambda s: 0 if s.get("name") == "google" else 1)
     _services = services
-
-
 
 
 def _openai_translate(text: str, timeout: int) -> Optional[str]:
@@ -67,7 +65,9 @@ def _openai_translate(text: str, timeout: int) -> Optional[str]:
     }
 
     try:
-        resp = requests.post(OPENAI_API_URL, headers=headers, json=payload, timeout=timeout)
+        resp = requests.post(
+            OPENAI_API_URL, headers=headers, json=payload, timeout=timeout
+        )
         resp.raise_for_status()
     except requests.RequestException as e:
         print("Request/HTTP error when calling OpenAI API:", e)
@@ -103,7 +103,9 @@ def _openai_translate(text: str, timeout: int) -> Optional[str]:
                 translated = data.get("translatedText")
 
         if translated is None:
-            print("Warning: couldn't find 'choices' or 'translatedText' in JSON; falling back to raw response text.")
+            print(
+                "Warning: couldn't find 'choices' or 'translatedText' in JSON; falling back to raw response text."
+            )
             translated = resp.text
 
         if translated:
@@ -115,7 +117,6 @@ def _openai_translate(text: str, timeout: int) -> Optional[str]:
         return None
 
     return None
-
 
 
 async def _async_translate(text, dest):
