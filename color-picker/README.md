@@ -6,12 +6,13 @@ you pick. A frameless, always-on-top overlay shows the closest match (hex,
 similarity, uvy, slot), marks the best of the five dye colors, and positions a
 uvy guide line.
 
-This repo ships **two implementations of the same tool**:
+This repo ships **three implementations of the same tool**:
 
 | Folder | Implementation |
 |--------|----------------|
 | [`python/`](python/) | Original — PyQt5 + scapy + numba |
 | [`cpp/`](cpp/)       | Rewrite — Win32/GDI+, single self-contained `picker.exe`, no Python runtime |
+| [`android/`](android/) | Android app — per-app VPN capture + native color search |
 
 Both behave the same: same protocol framing, same `msg_id=1652` parsing, the same
 swirl-noise algorithm (the C++ port is **bit-identical** to the numba version),
@@ -22,7 +23,8 @@ color-picker/
 ├─ resources/      shared textures (swirlnoisetexture/1..4.png)
 ├─ net.proto       shared protocol schema
 ├─ python/         main.py, algo.py, ui.py
-└─ cpp/            *.cpp / *.hpp, build.bat, CMakeLists.txt
+├─ cpp/            *.cpp / *.hpp, build.bat, CMakeLists.txt
+└─ android/        Kotlin UI/VPN service + C++ JNI search engine
 ```
 
 ## Differences
@@ -79,3 +81,27 @@ regression) without the game.
 Both resolve the shared `resources/` automatically (one level up from their
 folder). Open the outfit dye UI in-game and select a palette to trigger the
 `OutfitColorantSelectRsp` packet, then pick a target color in the overlay.
+
+## Running the Android version
+
+The Android app uses a local VPN and only routes installed clients with these
+fixed package names:
+
+```
+com.Nekootan.kfkjos.google
+com.Nekootan.kfkj.android
+```
+
+If both are installed, both are routed. If neither is installed, capture stops
+with an error instead of falling back to a device-wide VPN. Grant Android's VPN
+permission when prompted, then open the outfit dye UI in the game and select a
+palette.
+
+Build with JDK 17 and an Android SDK/NDK installed:
+
+```
+cd android
+./gradlew assembleDebug
+```
+
+The debug APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`.

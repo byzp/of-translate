@@ -15,3 +15,12 @@ python/net_pb2.py
 python/build/
 python/dist/
 python/*.spec
+
+
+android/build
+android/.gradle
+android/.kotlin
+android/app/.cxx
+android/app/build
+android/app/src/main/hev-build
+android/app/src/main/jniLibs

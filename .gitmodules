@@ -1,0 +1,3 @@
+[submodule "color-picker/android/app/src/main/hev-socks5-tunnel"]
+	path = color-picker/android/app/src/main/hev-socks5-tunnel
+	url = https://github.com/heiher/hev-socks5-tunnel.git
